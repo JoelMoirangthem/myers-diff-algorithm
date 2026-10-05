@@ -1,4 +1,5 @@
 import sys
+from array import array
 
 
 class FileReader:
@@ -71,25 +72,31 @@ class MyersDiffer:
             return [("+", None, j) for j in range(m)]
         if m == 0:
             return [("-", i, None) for i in range(n)]
-        v = {1: 0}
+        # V is one flat list indexed by k + off (no dict overhead).
+        # trace[d] is a compact int array holding only the d+1 diagonals
+        # k = -d, -d+2, ..., d, so trace[d][(k + d) // 2] == V[k] after round d.
+        # Memory is about 2*D*D bytes instead of a dict copy per round.
+        max_d = n + m
+        off = max_d + 1
+        v = [0] * (2 * max_d + 3)
+        v[off + 1] = 0
         trace = []
-        for d in range(n + m + 1):
-            cur = {}
+        for d in range(max_d + 1):
             for k in range(-d, d + 1, 2):
-                if k == -d or (k != d and v.get(k - 1, -1) < v.get(k + 1, -1)):
-                    x = v.get(k + 1, 0)
+                ki = off + k
+                if k == -d or (k != d and v[ki - 1] < v[ki + 1]):
+                    x = v[ki + 1]
                 else:
-                    x = v.get(k - 1, -1) + 1
+                    x = v[ki - 1] + 1
                 y = x - k
                 while x < n and y < m and a[x] == b[y]:
                     x += 1
                     y += 1
-                cur[k] = x
+                v[ki] = x
                 if x >= n and y >= m:
-                    trace.append(cur)
+                    trace.append(array("i", v[off - d:off + d + 1:2]))
                     return self._backtrack(trace, n, m)
-            trace.append(cur)
-            v = cur
+            trace.append(array("i", v[off - d:off + d + 1:2]))
         raise AssertionError("unreachable")
 
     def _backtrack(self, trace, n, m):
@@ -99,7 +106,8 @@ class MyersDiffer:
         for d in range(len(trace) - 1, -1, -1):
             cur = trace[d]
             k = x - y
-            x1 = cur[k]
+            idx = (k + d) // 2
+            x1 = cur[idx]
             y1 = x1 - k
             if d == 0:
                 for t in range(x1 - 1, -1, -1):
@@ -108,9 +116,10 @@ class MyersDiffer:
                 y = 0
                 break
             prev = trace[d - 1]
-            if k == -d or (k != d and prev.get(k - 1, -1) < prev.get(k + 1, -1)):
+            # In prev (round d-1), diagonal k-1 is at idx-1 and k+1 is at idx.
+            if k == -d or (k != d and prev[idx - 1] < prev[idx]):
                 pk = k + 1
-                xp = prev.get(pk, 0)
+                xp = prev[idx]
                 yp = xp - pk
                 x0 = xp
                 y0 = x0 - k
@@ -121,7 +130,7 @@ class MyersDiffer:
                 y = yp
             else:
                 pk = k - 1
-                xp = prev.get(pk, -1)
+                xp = prev[idx - 1]
                 yp = xp - pk
                 x0 = xp + 1
                 y0 = yp
